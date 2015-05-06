@@ -1,0 +1,247 @@
+
+#include <cerrno>
+#include <cstring>
+#include <string>
+#include <iostream>
+#include <sstream>
+
+#include <unistd.h>
+#include <sys/types.h>   // Various system types
+#include <sys/socket.h>  // Socket interface
+#include <arpa/inet.h>   // Utility network functions
+#include <netinet/in.h>  // Internet protocol interface
+#include <netdb.h>       // DNS lookup
+
+// Manages the coniguration of the socket.
+struct Config
+{
+  int         network;    // Specifies the network layer.
+  int         transport;  // Selects a transport profile.
+  const char* host;       // The DNS name of the host.
+  int         port;       // The application port number.
+};
+
+bool parse_command_line(int argc, char** argv, Config&);
+void run_stream_client(int cd, const Config&);
+void run_datagram_client(int sd, const Config&);
+
+int
+usage()
+{
+  std::cout << "usage: client <ipv4|ipv6> <tcp|udp> <hostname> <port-number>\n\n";
+  return 0;
+}
+
+int
+main(int argc, char* argv[])
+{
+  // Parse the command line arguments.
+  Config cfg;
+  if (!parse_command_line(argc, argv, cfg)) {
+    usage();
+    return -1;
+  }
+
+  // Create the socket.
+  int sd = socket(cfg.network, cfg.transport, 0);
+  if (sd < 0) {
+    std::cout << "error: " << std::strerror(errno) << '\n';
+    return -1;
+  }
+
+  // Run a server based on the requested transport type.
+  if (cfg.transport == SOCK_STREAM)
+    run_stream_client(sd, cfg);
+  else
+    run_datagram_client(sd, cfg);
+
+  // Close the socket and exit.
+  shutdown(sd, SHUT_RDWR);
+  close(sd);
+}
+
+bool
+parse_command_line(int argc, char** argv, Config& cfg)
+{
+  if (argc != 5) {
+    std::cout << "error (config): wrong number of command line arguments\n";
+    return false;
+  }
+
+  // Get the network layer protocol.
+  std::string network = argv[1];
+  if (network == "ipv4") {
+    cfg.network = AF_INET;
+  } else if (network == "ipv6") {
+    cfg.network = AF_INET6;
+  } else {
+    std::cout << "error (config): network must be 'ipv4' or 'ipv6'\n";
+    return false;
+  }
+
+  // Get the transport layer protocol.
+  std::string transport = argv[2];
+  if (transport == "tcp") {
+    cfg.transport = SOCK_STREAM;
+  } else if (transport == "udp")
+    cfg.transport = SOCK_DGRAM;
+  else {
+    std::cout << "error (config): transport must be 'tcp' or 'udp'\n";
+    return false;
+  }
+
+  cfg.host = argv[3];
+
+  // Get the port number.
+  std::string port = argv[4];
+  std::stringstream ss(port);
+  ss >> cfg.port;
+  if (!ss) {
+    std::cout << "error (config): invalid port number\n";
+    return false;
+  }
+
+  return true;
+}
+
+
+// Returns a string representation of the given address.
+std::string
+get_address_name(sockaddr_storage& addr)
+{
+  // Get the address field from the connected end point.
+  void* ptr;     // Points to the actual address field
+  if (addr.ss_family == AF_INET) {
+    sockaddr_in* p = (sockaddr_in*)&addr;
+    ptr = &p->sin_addr;
+  } else if (addr.ss_family == AF_INET6) {
+    sockaddr_in6* p = (sockaddr_in6*)&addr;
+    ptr = &p->sin6_addr;
+  } else {
+    std::cout << addr.ss_family << '\n';
+    return "<unknown>";
+  }
+  
+  // Get a textual representaiton of the client's address.
+  char name[64]; // Will store the address string
+  if (!inet_ntop(addr.ss_family, ptr, name, 64))
+    return "<error>";
+  else
+    return name;
+}
+
+
+void
+run_stream_client (int sd, const Config& cfg)
+{
+  // Give hints about the connection being requested.
+  addrinfo hint {};
+  std::memset(&hint, 0, sizeof(hint));
+  hint.ai_family = cfg.network;     // Use the requsted network
+  hint.ai_socktype = cfg.transport; // Use the requested transport
+
+
+  // TODO: We could pass a string representation of the
+  // port number getaddrinfo (or a well-known service name).
+  addrinfo* info;
+  int result = getaddrinfo(cfg.host, NULL, &hint, &info);
+  if (result < 0) {
+    std::cout << "error (getaddrinfo):" << gai_strerror(result) << '\n';
+    return;
+  }
+
+  // Print out the connected address name.
+  sockaddr_storage store;
+  std::memcpy(&store, info->ai_addr, info->ai_addrlen);
+  std::cout << "* will connect to: " << get_address_name(store) << '\n';
+
+  // Connect to the remove server.
+  // Bind the socket to the local address. We need
+  // to set up a socket address for this operation.
+  if (cfg.network == AF_INET) {
+    // Initialize the IPv4 address.
+    sockaddr_in* addr = (sockaddr_in*)info->ai_addr;
+    addr->sin_port = htons(cfg.port);
+
+    // Bind the socket to the address.
+    if (connect (sd, info->ai_addr, info->ai_addrlen) < 0) {
+      std::cout << "error (connect ipv4): " << std::strerror(errno) << '\n';
+      return;
+    }
+  } else {
+    // Initialize the IPv6 address.
+    sockaddr_in6* addr = (sockaddr_in6*)info->ai_addr;
+    addr->sin6_port = htons(cfg.port);
+
+    // Connect the socket to the address.
+    if (connect (sd, info->ai_addr, info->ai_addrlen) < 0) {
+      std::cout << "error (connect ipv6): " << std::strerror(errno) << '\n';
+      return;
+    }
+  }
+
+  // Send input to the server.
+  constexpr int bufsize = 1 << 16;  // Max buffer size
+  char buf[bufsize];                // Stores the messages
+  while (std::cin >> buf) {
+    // Send data to the connected client. The MSG_DONTWAIT flag
+    // causes the data to be sent immediately instead of buffered.
+    int n = send(sd, buf, bufsize, MSG_DONTWAIT);
+    if (n <= 0) {
+      if (n == 0) {
+        shutdown(sd, SHUT_RDWR);
+        close(sd);
+      } else {
+        std::cout << "error (send): " << std::strerror(errno) << '\n';
+      }
+      break;
+    }
+  }
+
+  freeaddrinfo(info);
+}
+
+void
+run_datagram_client(int sd, const Config& cfg)
+{
+  sockaddr* addr;
+  sockaddr_in addr4;
+  sockaddr_in6 addr6;
+  socklen_t length;
+
+  if (cfg.network == AF_INET) {
+    // Initialize the IPv4 address.
+    std::memset(&addr4, 0, sizeof(addr4)); // Zero-initialize the address
+    addr4.sin_family = AF_INET;           // Set the address family
+    addr4.sin_addr.s_addr = INADDR_ANY;   // Allow messages from anywhere
+    addr4.sin_port = htons(cfg.port);     // Set the port number
+    addr = (sockaddr*)&addr4;
+    length = sizeof(addr4);
+  } else {
+    // Initialize the IPv6 address.
+    std::memset(&addr6, 0, sizeof(addr6)); // Zero-initialize the address
+    addr6.sin6_family = AF_INET6;         // Set the address family
+    addr6.sin6_addr = in6addr_any;        // Allow messages from anywhere
+    addr6.sin6_port = htons(cfg.port);    // Set the port number
+    addr = (sockaddr*)&addr6;
+    length = sizeof(addr6);
+  }
+
+  // Send input to the server.
+  constexpr int bufsize = 1 << 16;  // Max buffer size
+  char buf[bufsize];                // Stores the messages
+  while (std::cin >> buf) {
+    // Send data to the connected client
+    int n = sendto(sd, buf, bufsize, 0, addr, length);
+    if (n <= 0) {
+      if (n == 0) {
+        shutdown(sd, SHUT_RDWR);
+        close(sd);
+      } else {
+        std::cout << "error (send): " << std::strerror(errno) << '\n';
+      }
+      return ;
+    }
+  }
+}
+

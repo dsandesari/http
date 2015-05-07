@@ -19,12 +19,14 @@ Keywords – HTTP (HyperText Transfer Protocol), TCP (Transmission Control Proto
 The Hypertext Transfer Protocol (HTTP) is an application-level protocol for distributed, collaborative, hypermedia information systems. This is the foundation for data communication for the World Wide Web (i.e. internet) since 1990. HTTP is a generic and stateless protocol that can be used for other purposes as well using extensions of its request methods, error codes, and headers. 
 
 
-History:
-Tim Berners-Lee and his team at CERN are credited with inventing the original HTTP along with HTML and the associated technology for a web server and a text-based web browser. Berners-Lee first proposed the "World Wide Web" project in 1989. The first version of the protocol had only one method, namely GET, which would request a page from a server. The response from the server was always an HTML page.
+History:  
+  
+  Tim Berners-Lee and his team at CERN are credited with inventing the original HTTP along with HTML and the associated technology for a web server and a text-based web browser. Berners-Lee first proposed the "World Wide Web" project in 1989. The first version of the protocol had only one method, namely GET, which would request a page from a server. The response from the server was always an HTML page.
 The first documented version of HTTP was HTTP V0.9 (1991). RFC 2616 (June 1999) defines HTTP/1.1 is most commonly used today. HTTP/2 is currently in draft form. This project uses HTTP V1.0 (1996) specified in RFC 1945.
 
-Overall Operation:
-	The HTTP protocol is based on a request/response paradigm as shown in Figure 1.1. A client establishes a connection with a server and sends a request to the server in the form of a request method, URI, and protocol version, followed by a MIME-like message containing request modifiers, client information, and possible body content. The server responds with a status line, including the message's protocol version and a success or error code, followed by a MIME-like message containing server information, entity meta-information, and possible body content.  
+Overall Operation:  
+  
+  The HTTP protocol is based on a request/response paradigm as shown in Figure 1.1. A client establishes a connection with a server and sends a request to the server in the form of a request method, URI, and protocol version, followed by a MIME-like message containing request modifiers, client information, and possible body content. The server responds with a status line, including the message's protocol version and a success or error code, followed by a MIME-like message containing server information, entity meta-information, and possible body content.  
 	![Alt text](http://www.tankonyvtar.hu/en/tartalom/tamop425/0027_ADW1/images/ADW100.png )  
 	    Figure 1.1 HTTP Client Server
 		
@@ -91,26 +93,24 @@ HTTP functions as a request-response protocol in the client-server computing mod
 
 Code:	 https://github.com/dsandesari/http
 
-Implementation:	 
-HTTP protocol is implemented over connection oriented TCP protocol that supports IPv4 network. The Client/Server is implemented using socket based programming. This implementation handles only GET and HEAD request and responses. The content types supported are only text/html files. The server supports two types of status or response codes.
- 
+Implementation:  
+HTTP protocol is implemented over connection oriented TCP protocol that supports IPv4 network. The Client/Server is implemented using socket based programming. This implementation handles only GET and HEAD request and responses. The content types supported are only text/html files. The server supports two types of status or response codes.  
+  
+HTTP Server:    
 
-HTTP Server:
-To configure the server initially we need to pass port number and root directory of http server where the source files are present. If root directory is not present the server returns error.
+To configure the server initially we need to pass port number and root directory of http server where the source files are present. If root directory is not present the server returns error.  
 ./httpserver 7700 '/Users/ROHITH/http/httpserver/rootdir'
 
 The HTTP Server creates a socket, binds the socket to the address and listens for the connections. The server waits for client connections and accepts until the client connects to the server. Once the client sends the request, the server starts parsing the request and constructs the status message and http response header with optional body. Server checks if the file requested by client available or not. If file is not found the server only sends the status message “HTTP/1.0 404 Not Found” and if file is found then server constructs header with fields such as Date, Server, Content-Type, and Content-Length. The server sends the body of the message if input requested is a GET request or else if it is a HEA request the server omits the body of the message. 
 
 
-Concurrent Iterative Server: 
-The server is iterative as it runs continuously using the while loop until the process is terminated. Once the server accepts a connection and then it creates a child to do the work and once after the child process is done it loop backs and waits for the next connection as shown in Figure 4.2.
-        
- 
-
-Figure 4.2 Concurrent Iterative Servers
-
-HTTP Client:
-To configure the client initially we need to pass request type, hostname, port number and request file path. The commands line inputs are parsed to check the validity of inputs.
+Concurrent Iterative Server:  
+  
+  The server is iterative as it runs continuously using the while loop until the process is terminated. Once the server accepts a connection and then it creates a child to do the work and once after the child process is done it loop backs and waits for the next connection.    
+  
+HTTP Client:  
+  
+  To configure the client initially we need to pass request type, hostname, port number and request file path. The commands line inputs are parsed to check the validity of inputs.
  ./httpclient GET /index.html localhost 7700 HTTP/1.0
 The client creates the socket and connects to the socket address of the server. The client then constructs the request message and sends it to the server and waits for the response. The client then receives the http response message and displays it on the standard output.
 
@@ -125,10 +125,10 @@ The client creates the socket and connects to the socket address of the server. 
 -	Concurrency of the Server (fork)
 -	Accept the connections
 -	Receive get request from client
--	Construct the HTTP response message 
-a.	Header (Date, Server, Content-Type (only text/html), Content-Length) 
-b.	Status message (HTTP/1.0 200 OK or HTTP/1.0 404 Not Found)
-c.	Body
+-	Construct the HTTP response message  
+-	a.	Header (Date, Server, Content-Type (only text/html), Content-Length)  
+-	b.	Status message (HTTP/1.0 200 OK or HTTP/1.0 404 Not Found)  
+-	c.	Body
 -	Handling of GET/HEAD Response 
 -	Send response to the client
 	

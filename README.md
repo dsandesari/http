@@ -1,11 +1,4 @@
 #HTTP Client and Server
-
-Deekshith Sandesari  
-Department Of Computer Science  
-The University Of Akron  
-E-mail: ds168@zips.uakron.edu
-
-
  
 ##Abstract
 
